@@ -1,44 +1,40 @@
 const socket = io("/");
-const videoGrid = document.getElementById("video-grid");
+const peersArea = document.getElementById("peers-area");
+const myArea = document.getElementById("my-area");
 const peers = {};
 
-const myPeer = new Peer();
+const myPeer = new Peer(undefined, { serialization: "json" });
 
 const myVideo = document.createElement("video");
 myVideo.muted = true;
 
-navigator.mediaDevices
-  .getUserMedia({
-    video: true,
-    audio: true,
-  })
-  .then((stream) => {
-    addVideoStream(myVideo, stream);
-
-    myPeer.on("call", (call) => {
-      call.answer(stream);
-      const video = document.createElement("video");
-      peers[call.peer] = { call, video };
-
-      call.on("stream", (userVideoStream) => {
-        addVideoStream(video, userVideoStream);
-      });
-
-      call.on("close", () => {
-        video.remove();
-      });
-    });
-
-    socket.on("user-connected", (userId) => {
-      connectToNewUser(userId, stream);
-    });
-  });
-
 myPeer.on("open", (userId) => {
-  socket.emit("join-room", ROOM_ID, userId);
+  navigator.mediaDevices
+    .getUserMedia({
+      video: true,
+      audio: true,
+    })
+    .then((stream) => {
+      socket.on("user-connected", (userId) => {
+        connectToNewUser(userId, stream);
+      });
+      socket.emit("join-room", ROOM_ID, userId);
+      addVideoStream(myVideo, stream, true);
+
+      myPeer.on("call", (call) => {
+        call.answer(stream);
+        const video = document.createElement("video");
+        peers[call.peer] = { call, video };
+
+        call.on("stream", (userVideoStream) => {
+          addVideoStream(video, userVideoStream);
+        });
+      });
+    });
 });
 
 socket.on("user-disconnected", (userId) => {
+  console.log("disconnect");
   if (peers[userId]) {
     peers[userId].call.close();
     peers[userId].video.remove();
@@ -53,17 +49,14 @@ function connectToNewUser(userId, stream) {
     addVideoStream(video, userVideoStream);
   });
 
-  call.on("close", () => {
-    video.remove();
-  });
-
   peers[userId] = { call, video };
+  console.log(peers);
 }
 
-function addVideoStream(video, stream) {
+function addVideoStream(video, stream, myVideo = false) {
   video.srcObject = stream;
   video.addEventListener("loadedmetadata", () => {
     video.play();
   });
-  videoGrid.append(video);
+  myVideo ? myArea.append(video) : peersArea.append(video);
 }
